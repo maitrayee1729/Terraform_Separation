@@ -1,0 +1,11 @@
+ROOT_USER : root
+ROOT_PWD : UnI@#3D
+UNIWARE_USER : uniware
+UNIWARE_PWD : un!w@re@1256
+REPLICA_USER : uniware_read
+REPLICA_PWD : un!w@re@239
+REPLICATION_USER : replication
+REPLICATION_PWD : uniware
+BACKUP_USER : backupuser
+BACKUP_PWD : backupUser@5#
+WORMHOLE_PWD : uniware

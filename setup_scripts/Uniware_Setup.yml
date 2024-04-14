@@ -1,0 +1,308 @@
+---
+- hosts: 
+    - app_servers
+  remote_user: build
+  become: true
+  vars:
+    catalina_path: "/usr/local/apache-tomcat/bin/catalina.sh"
+  
+  tasks:
+
+    - set_fact: 
+        server_hostname: "{{ inventory_hostname }}"
+
+    - set_fact:
+        Hazelcast_Members:
+          Standalone: "app1.{{ tenant_shortname|lower }}.unicommerce.infra"
+          Dedicated_Setup: "app1.{{ tenant_shortname|lower }}-in.unicommerce.infra"
+          Dedicated_Setup_Task: "app1.{{ tenant_shortname|lower }}.unicommerce.infra,app2.{{ tenant_shortname|lower }}.unicommerce.infra"
+        when: launch_region == 'Singapore'
+
+    - set_fact:
+        Hazelcast_Members:
+          Standalone: "app1.{{ tenant_shortname|lower }}-in.unicommerce.infra"
+          Dedicated_Setup: "app1.{{ tenant_shortname|lower }}-in.unicommerce.infra"
+          Dedicated_Setup_Task: "app1.{{ tenant_shortname|lower }}-in.unicommerce.infra,app2.{{ tenant_shortname|lower }}-in.unicommerce.infra"
+        when: launch_region == 'Mumbai'
+
+    - set_fact: 
+        hazelcast_members: "{{ Hazelcast_Members.Standalone }}"
+      when: setup_type == 'Standalone' 
+
+    - set_fact: 
+        hazelcast_members: "{{ Hazelcast_Members.Dedicated_Setup }}"
+      when: setup_type == 'Dedicated_Setup'
+
+    - set_fact:
+        hazelcast_members: "{{ Hazelcast_Members.Dedicated_Setup_Task }}"
+      when: setup_type == 'Dedicated_Setup_Task'
+
+    - name: Check disk type 
+      shell: lsblk -do name | awk 'NR==2'
+      register: disk_type
+
+    - set_fact:
+        disk_name: "/dev/nvme1n1"
+      when: disk_type.stdout | regex_search('nvme')
+
+    - set_fact:
+        disk_name: "/dev/xvdf"
+      when: disk_type.stdout | regex_search('xvd')
+
+    - name: Initialise /usr/local disk
+      shell: mkfs -t xfs "{{ disk_name }}"
+
+    - name: Mount /usr/local
+      shell: mount "{{ disk_name }}" /usr/local
+
+    - name: Get UUID value
+      shell: blkid -s UUID -o value "{{ disk_name }}"
+      register: usr_local_uuid
+
+    - name: Update Entry in fstab
+      shell: runuser -l root -c "echo \"UUID={{ usr_local_uuid.stdout }}     /usr/local   xfs    defaults        0       0\" >> /etc/fstab"
+
+    #Create uniware user and group with id: 1004
+    - name: Create uniware group 
+      shell: groupadd -g1004 uniware
+
+    - name: Create uniware user with no home directory and login shell
+      shell: useradd uniware -u1004 -g1004 -M -d /dev/null -s /sbin/nologin
+
+    - name: Set hostname of server
+      shell: hostnamectl set-hostname "{{ server_hostname }}"
+      when: setup_type != 'Standalone'
+
+    - name: Configure Ipa hostmanager
+      shell: ipa-client-install  --principal hostmanager --password "{{ ipa_host_pwd }}" --mkhomedir --hostname="{{ server_hostname }}" --domain ipa.unicommerce.infra  --server ipa.unicommerce.infra  --unattended
+
+    - name: Add host to uniapps host-group on ipa
+      shell: echo "{{ ipa_host_pwd }}" | kinit hostmanager | ipa hostgroup-add-member uniapps --hosts="{{ server_hostname }}"
+
+    - name: Entery for smtp in mailrc
+      shell: sed -i '/Sccsid/i set smtp=smtp://icinga2.unicommerce.infra' /etc/mail.rc
+      #when: launch_region == 'Singapore'
+
+    - name: Copy required config files and scripts
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      with_items:
+        - { src: '{{ workspace }}/configFiles/accessLog', dest: '/etc/logrotate.d', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/syslog', dest: '/etc/logrotate.d', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/bashrc', dest: '/etc', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/crontab', dest: '/etc', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/rsyslog.conf', dest: '/etc', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/chrony.conf', dest: '/etc', owner: 'root', group: 'root', mode: 755 }
+        - { src: '{{ workspace }}/configFiles/ntp.conf', dest: '/etc', owner: 'root', group: 'root', mode: 755 }
+        - { src: '{{ workspace }}/configFiles/RotateLogstoS3', dest: '/root', owner: 'root', group: 'root', mode: 755 }
+        - { src: '{{ workspace }}/configFiles/ServerLogRotate', dest: '/root', owner: 'root', group: 'root', mode: 755 }
+        - { src: '{{ workspace }}/configFiles/mysqlConfigFiles/db-write-event.service', dest: '/usr/lib/systemd/system', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/mysqlConfigFiles/db-write-event', dest: '/usr/src', owner: 'root', group: 'root', mode: 755 }
+        - { src: '{{ workspace }}/configFiles/.muttrc', dest: '/root', owner: 'root', group: 'root', mode: 755 }
+        - { src: '{{ workspace }}/configFiles/elastic.repo', dest: '/etc/yum.repos.d', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/uniware.service', dest: '/usr/lib/systemd/system', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/ssh2container', dest: '/bin', owner: 'root', group: 'root', mode: 755 }
+        - { src: '{{ workspace }}/configFiles/HeapDump', dest: '/bin', owner: 'root', group: 'root', mode: 755 }
+        - { src: '{{ workspace }}/configFiles/ThreadsDump', dest: '/bin', owner: 'root', group: 'root', mode: 755 }
+        - { src: '{{ workspace }}/configFiles/HistoDump', dest: '/bin', owner: 'root', group: 'root', mode: 755 }
+
+    #FileBeat Installation 
+    - name: Download and install the public signing key for FileBeat
+      shell: rpm --import https://packages.elastic.co/GPG-KEY-elasticsearch
+
+    #Current standard version for running uniware
+    - name: Install FileBeat, mysql-client, aws and dependencies for db-write-event
+      shell: "{{ item.cmd }}"
+      with_items: 
+        - { cmd: 'yum -y install filebeat-6.5.0' }
+        - { cmd: 'yum -y install mysql' }
+        - { cmd: 'yum -y install "perl(DBD::mysql)"' }
+        - { cmd: 'yum -y install "perl-Digest-MD5"' }
+        - { cmd: 'sh -x /root/aws/install --update' }
+        
+    - name: MySQL-python install
+      yum: name={{item}} state=present
+      with_items:
+          - python-pip
+          - python-devel
+          - pymongo
+          - MySQL-python
+      become: yes    
+       
+    - name: Copy required config files and scripts
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      with_items:
+        - { src: '{{ workspace }}/configFiles/filebeat.yml', dest: '/etc/filebeat', owner: 'root', group: 'root', mode: 600 }
+
+    - name: synchronise tomcat and static file directories
+      synchronize:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        rsync_opts: 
+          - "--chown=uniware:uniware"
+      with_items:
+        - { src: '{{ workspace }}/configFiles/apache-tomcat', dest: '/usr/local' }
+        - { src: '{{ workspace }}/configFiles/files', dest: '/' }
+
+    - name: Create symlink for uniware binaries 
+      file:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: root
+        group: root
+        state: link
+      with_items:
+        - { src: '/usr/local/apache-tomcat/docker/uniware', dest: '/bin/uniware'}
+        - { src: '/usr/local/apache-tomcat/docker/start_container', dest: '/usr/local/apache-tomcat/bin/start_container'}
+
+    #Catalina updation tasks
+    - name: Get total memory
+      shell: free -m | awk 'NR==2{print $2}'
+      register: total_memory
+
+    - set_fact:
+        Memory_split:
+          with_mysql: "{{ (total_memory.stdout|float * 0.3)|round|int }}"
+          without_mysql: "{{ (total_memory.stdout|float * 0.7)|round|int }}"
+
+    - name: Update MaxHeapSize in catalina [MYSQL RUNNING]
+      shell: sed -i "s|`grep -o '\-Xmx[^ ]*' {{ catalina_path }}`|-Xmx{{ Memory_split.with_mysql }}M|1"  "{{ catalina_path }}"
+      when: setup_type == 'Standalone'
+
+    - name: Update MaxHeapSize in catalina [MYSQL NOT RUNNING]
+      shell: sed -i "s|`grep -o '\-Xmx[^ ]*' {{ catalina_path }}`|-Xmx{{ Memory_split.without_mysql }}M|1"  "{{ catalina_path }}"
+      when: setup_type != 'Standalone'
+
+    #HazelCast Members Map entry
+    - name: Change entries in catalina.sh
+      replace:
+        path: "{{ catalina_path }}"
+        regexp: "{{ item.regexp }}"
+        replace: "{{ item.replace }}"
+      with_items:
+        - { regexp: 'TENANT_SHORTNAME', replace: '{{ tenant_shortname }}' }
+        - { regexp: 'TENANT_HOSTNAME', replace: '{{ server_hostname }}' }
+        - { regexp: 'HAZELCAST_MEMBERS', replace: '{{ hazelcast_members }}' }
+        - { regexp: 'TENANT_SPECIFIC_MONGO_HOST', replace: '{{ tenant_specific_mongo_host }}' }
+        - { regexp: 'ZOOKEEPER_HOST', replace: '{{ zookeeper_hostname }}' }
+        - { regexp: 'TRACELOG_ACTIVEMQ_BROKER', replace: '{{ TRACELOG_ACTIVEMQ_BROKER }}' }
+        - { regexp: 'ACTIVEMQ_BROKER', replace: '{{ ACTIVEMQ_BROKER }}' }
+        - { regexp: 'ACTIVEMQ2_BROKER', replace: '{{ ACTIVEMQ2_BROKER }}' }
+        - { regexp: 'INVOICE_ACTIVEMQ_BROKER', replace: '{{ INVOICE_ACTIVEMQ_BROKER }}' }
+
+    - name: Enable tasks on task server
+      replace:
+        path: "{{ catalina_path }}"
+        regexp: "{{ item.regexp }}"
+        replace: "{{ item.replace }}"
+      with_items:
+        - { regexp: '-DexecuteJobs=false', replace: '-DexecuteJobs=true' }    
+      when: (setup_type == 'Standalone') or (setup_type == 'Dedicated_Setup') or ('app2' in inventory_hostname)
+
+    - name: Set Icinga Installation File
+      set_fact:
+        icinga_client_file: "{{ 'icinga_client_install.sh' if launch_region == 'Singapore' else 'icinga_india_client_install.sh' }}"
+      delegate_to: 127.0.0.1
+
+    - name: Output Icinga Installation File Name
+      debug: 
+        msg: "{{ icinga_client_file }}"
+
+#    - name: Icinga Installation [Conditional]
+#      script:
+#        cmd: "{{ item.cmd }}"
+#        chdir: "{{ item.chdir }}"
+#      with_items:
+#        - { cmd: '{{ workspace }}/remote_exec_files/{{ icinga_client_file }}', chdir: '/tmp' }
+#      when: setup_type != 'Standalone'
+
+#    - name: Icinga Config update for cluster members
+#      shell: sh -x {{ workspace }}/remote_exec_files/icingaConfUpdate.sh "{{ tenant_shortname }}" "{{ server_hostname }}" "{{ setup_type }}" "{{ replica_hostname }}" "{{ private_key }}" "{{ launch_region }}" >> /tmp/{{ tenant_shortname }}_icinga_conf_update.log 2>&1
+#      delegate_to: 127.0.0.1
+
+    - name: Hazelcast setup 
+      script:
+        cmd: "{{ item.cmd }}"
+        chdir: "{{ item.chdir }}"
+      with_items:
+        - { cmd: '{{ workspace }}/remote_exec_files/hazelcast_setup.sh {{ server_hostname }} {{ tenant_shortname }}', chdir: '/usr/local/apache-tomcat/bin' }
+
+    #Save Cron for applog rotation
+    - cron:
+        name: "{{ item.cron_name }}"
+        user: root
+        cron_file: /etc/crontab
+        minute: "{{ item.minute }}"
+        hour: "{{ item.hour }}"
+        job: "{{ item.job }}"
+        state: present
+      with_items:
+        - { cron_name: 'Rotate Logs to s3', minute: 0, hour: '6,13,18,23', job: 'sh -x /root/RotateLogstoS3 > /tmp/RotateLogstoS3.log 2>&1' }
+        - { cron_name: 'Rotate ServerLogs', minute: 30, hour: 0, job: 'sh -x /root/ServerLogRotate > /tmp/serverlogrotate.log 2>&1' }
+
+    - name: Allow specifed users to run docker commands
+      lineinfile:
+        path: /etc/sudoers
+        line: "{{ item.line }}"
+        validate: '/usr/sbin/visudo -cf %s'
+      with_items:
+        - { line: 'icinga  ALL=NOPASSWD: /usr/bin/docker' } 
+        - { line: 'uniware  ALL=NOPASSWD: /usr/bin/docker' } 
+        - { line: 'build  ALL=NOPASSWD: /usr/bin/docker' }
+        - { line: 'ALL  ALL=NOPASSWD: /usr/local/apache-tomcat/docker/uniware' }
+
+        
+    - name: Enable db-write service and create mysql-command.log file
+      file:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: root
+        group: root
+        state: "{{ item.state }}"
+      with_items:
+        - { src: '', dest: '/var/log/mysql-command.log', state: 'touch' }
+        - { src: '/usr/lib/systemd/system/db-write-event.service', dest: '/etc/systemd/system/multi-user.target.wants/db-write-event.service', state: 'link' }
+
+    - name: Reload systemd 
+      shell: systemctl daemon-reload
+
+    - name: Start and enable services
+      service: 
+        name: "{{ item.name }}" 
+        state:  "{{ item.state }}"
+        enabled: "{{ item.enabled }}"
+      with_items:
+        - { name: 'ntpd', state: 'stopped', enabled: 'no' }
+        - { name: 'chronyd', state: 'restarted', enabled: 'yes' }
+        - { name: 'systemd-logind', state: 'restarted', enabled: 'yes' }
+        - { name: 'db-write-event', state: 'started', enabled: 'yes' }
+        - { name: 'filebeat', state: 'started', enabled: 'yes' }
+        - { name: 'rsyslog', state: 'restarted', enabled: 'yes' }
+        - { name: 'uniware', state: 'started', enabled: 'yes' }
+
+    - name: Create nfs-directory for heapdump
+      shell: sudo mkdir -p /heapdump   
+        
+    - name: Insert entry in fstab
+      lineinfile:
+        path: /etc/fstab
+        line: uclog.unicommerce.infra:/applogs/heapdump /heapdump nfs defaults,nofail 0 0
+        
+    - name: Mount nfs-directory
+      shell: mount /heapdump
+          
+    - name: Write Success Status
+      shell: echo "Success!" > /tmp/{{ tenant_shortname }}_uniware_status.txt
+      delegate_to: 127.0.0.1
+        
+
+

@@ -1,0 +1,2 @@
+set ssl_starttls = yes
+set smtp_url = "smtp://icinga2.unicommerce.infra:25/"

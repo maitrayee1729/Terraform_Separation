@@ -1,0 +1,23 @@
+mkdir /etc/unicommerce/TENANT.lst
+
+acl host-TENANT hdr_dom(host) -f /etc/unicommerce/TENANT.lst
+
+use_backend www-TENANT-app1 if host_TENANTURL-app1
+use_backend www-TENANT-app2 if host_TENANT URL-app2
+use_backend www-TENANT if host_TENANT
+
+backend www-TENANT-app1
+        balance roundrobin
+        cookie unicommerce insert indirect nocache
+        server tomcat1 app1.TENANT_LOWER-in.unicommerce.infra:8080 check cookie app1
+
+backend www-TENANT-app2
+        balance roundrobin
+        cookie unicommerce insert indirect nocache
+        server tomcat1 app2.TENANT_LOWER-in.unicommerce.infra:8080 check cookie app2
+
+backend www-TENANT
+        balance roundrobin
+        cookie unicommerce insert indirect nocache
+        server apache app1.TENANT_LOWER-in.unicommerce.infra:8080 check port 8080
+

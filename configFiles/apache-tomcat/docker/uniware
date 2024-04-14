@@ -1,0 +1,51 @@
+#!/bin/bash +x
+
+cmd="$1"
+num=`sudo docker ps | grep uniware_ | wc -l`
+
+if [ "`id -u`" -ne 0 ]; then
+ exec sudo "$0" "$@"
+ exit 99
+fi
+
+if [ "$cmd" == "start" ]; then
+
+        # Start the container using latest image
+        cat_path="/usr/local/apache-tomcat/bin/catalina.sh"
+
+        total_mem=`free -m | awk 'NR==2{print $2}'`
+        mysql_status=`ss -tln | grep ':3306' | awk '{print $1}'`
+
+        # Checking If Mysql Is Running
+        if [ "$mysql_status" == "LISTEN" ];then
+            # Setting Max Heap Size 30%
+            max_heap=`echo $(( total_mem*30/100 ))`
+        else
+            # Setting Max Heap Size 70%
+            max_heap=`echo $(( total_mem*70/100 ))`
+        fi
+
+        sed -i "s|`grep -o '\-Xmx[^ ]*' ${cat_path}`|-Xmx${max_heap}M|1" "${cat_path}"
+        service uniware start
+
+elif [ "$cmd" == "stop" ]; then
+
+        if [ "$num" == 0 ]; then
+                echo -- No running Containers --
+                service uniware stop
+                exit
+        fi
+
+        # Find running container with latest image
+        container_name=`docker ps --format="{{.Names}}" | sort -r | awk 'NR==1'`
+
+        echo Stopping Container -- $container_name --
+        service uniware stop
+        docker $cmd $container_name
+        truncate -s0 /usr/local/apache-tomcat/docker/active_containers
+
+else
+        echo -- Invalid Command --
+        echo -- Usage: uniware [start or stop]
+        exit
+fi

@@ -1,0 +1,20 @@
+[Unit]
+Description=Tomcat - instance %i
+After=syslog.target network.target docker.service
+
+[Service]
+User=root
+Group=root
+
+Type=fork
+ExecStart=/bin/bash /usr/local/apache-tomcat/bin/start_container
+
+TimeoutStartSec=30m
+RestartSec=15s
+Restart=always
+StartLimitBurst=3
+
+[Install]
+WantedBy=multi-user.target
+
+

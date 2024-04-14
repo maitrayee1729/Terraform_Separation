@@ -1,0 +1,13 @@
+#!/bin/bash
+
+#Delete logs older than 2 days : -maxdepth 2 -mtime +2
+sudo find /usr/local/apache-tomcat/logs/ -maxdepth 2 -type f \( -name 'server.log*' -o -name 'job-metrics*' -o -name 'localhost*' -o -name 'host-manager*' -o -name 'third-party-api*' -o -name 'service-metrics*' -o -name 'catalina*' -o -name 'system-metrics*' -o -name 'manager*' -o -name 'import-export-logger*' \) -mtime +2 -delete
+
+#Move application logs to ServerLog directory : -maxdepth 1 -mtime +0
+sudo find /usr/local/apache-tomcat/logs/ -maxdepth 1 -type f \( -name 'server.log*' -o -name 'job-metrics*' -o -name 'localhost*' -o -name 'host-manager*' -o -name 'third-party-api*' -o -name 'service-metrics*' -o -name 'catalina*' -o -name 'system-metrics*' -o -name 'manager*' -o -name 'import-export-logger*' \) -mtime +0 -exec mv {} /usr/local/apache-tomcat/logs/ServerLog/ \;
+
+#Move catalina.out (if exists) to ServerLog Directory
+sudo find /usr/local/apache-tomcat/logs/ -maxdepth 1 -type f \( -name 'catalina.out' \) -exec mv {} /usr/local/apache-tomcat/logs/ServerLog/ \;
+
+#Gzip files in Serverlog directory
+sudo find /usr/local/apache-tomcat/logs/ServerLog/ -maxdepth 1 -type f \( -name '*.log' -o -name '*.out' \) -exec gzip {} \;

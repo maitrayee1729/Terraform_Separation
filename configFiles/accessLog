@@ -1,0 +1,13 @@
+/usr/local/apache-tomcat/logs/*.txt {
+    daily
+    rotate 30
+    compress
+    dateext
+dateformat .%Y-%m-%d
+    missingok
+    notifempty
+    sharedscripts
+    postrotate
+ /usr/bin/find /usr/local/apache-tomcat/logs/ -name "*.txt.*" -type f -mtime +30 -delete;	
+endscript
+}

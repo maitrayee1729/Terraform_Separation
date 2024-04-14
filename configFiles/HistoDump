@@ -1,0 +1,17 @@
+#!/bin/bash
+Host=$(hostname -f | cut -d"." -f1,2)
+name=$(cat /usr/local/apache-tomcat/docker/active_containers | awk '{print $1}')
+file="/usr/local/apache-tomcat/logs/${Host}_HistoDump_$(date +%Y_%m_%d-%H_%M_%S).log"
+
+url_path="https://uniware-dumps.s3.ap-south-1.amazonaws.com/histodumps/${Host}_HistoDump_$(date +%Y_%m_%d-%H_%M_%S).log"
+bucket_path="s3://uniware-dumps/histodumps/"
+sudo docker exec uniware_$name bash -c "/usr/local/java/jdk1.8.0_161/bin/jmap -histo 1 | awk '{print \$2 , \$0}' | sort -n -r > ${file}"
+echo "HistoDump dumped at $url_path"
+
+
+
+
+aws_bin="/usr/local/bin/aws"
+$aws_bin s3 cp $file $bucket_path
+sudo rm -rf $file 
+

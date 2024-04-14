@@ -1,0 +1,10 @@
+#!/bin/bash
+
+name=`cat /usr/local/apache-tomcat/docker/active_containers | awk '{print $1}'`
+file="/usr/local/apache-tomcat/logs/threads_dump_$(date +%Y_%m_%d-%H_%M_%S).log"
+sudo docker exec uniware_$name bash -c "/usr/local/java/jdk1.8.0_161/bin/jstack -l 1 > ${file}"
+
+status=$?
+if [ ${status} -ne 0 ]; then
+	echo "ThreadsDump created at : ${file}"
+fi

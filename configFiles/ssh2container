@@ -1,0 +1,39 @@
+#!/bin/bash
+
+control_c () {
+# run if user hits control-c
+  echo  -e '\n' "\n\033[5;31m   O Hoo!! EXITED :(" '\n'; tput sgr0
+  exit $?
+}
+
+clear           
+count=0 
+IFS=$'\n'
+container=`sudo docker ps --format '{{.ID}} {{.Names}}'`
+FILE=/tmp/list.txt
+         
+trap 'control_c' INT
+echo -e '\033[31m'"
+Num. Container ID   Name" '\n'; tput sgr0
+         
+for i in ${container[@]}
+        do
+                count=$((count+1))
+                echo "($count) "$i""
+done |  tee $FILE;
+read -p $'\e\n[32m        Please [ Enter ] number to which container you want to SSH \e[0m: ' num
+while :  
+        do
+                container_id=`grep "($num)" $FILE | awk '{print $2}'`
+                container_name=`grep "($num)" $FILE | awk '{print $3}'`
+                clear
+
+                echo -e '\033[36m' '\n' "Entered to container $container_id $container_name" '\n'; tput sgr0
+                echo -ne '\n' ""
+		sudo docker exec -it $container_id bash                
+		echo -e '\n' ""
+		#clear
+		break
+               
+        done
+

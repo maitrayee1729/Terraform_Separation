@@ -1,0 +1,181 @@
+---
+- hosts: 
+    - db_server
+  remote_user: build
+  become: true    
+  
+  tasks:
+
+    - set_fact: 
+        server_hostname: "app1.{{ tenant_shortname|lower }}.unicommerce.infra"
+      when: setup_type == 'Standalone' and ( launch_region == 'Singapore' )
+
+    - set_fact: 
+        server_hostname: "db.{{ tenant_shortname|lower }}.unicommerce.infra"
+      when: setup_type != 'Standalone' and ( launch_region == 'Singapore' )
+    
+    - set_fact:
+        server_hostname: "app1.{{ tenant_shortname|lower }}-in.unicommerce.infra"
+      when: setup_type == 'Standalone' and ( launch_region == 'Mumbai' )
+
+    - set_fact:
+        server_hostname: "db.{{ tenant_shortname|lower }}-in.unicommerce.infra"
+      when: setup_type != 'Standalone' and ( launch_region == 'Mumbai' )
+
+    - name: Add mysql GPG key and version repo-list for mysql installation
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      with_items:
+        - { src: '{{ workspace }}/configFiles/mysqlConfigFiles/RPM-GPG-KEY-mysql', dest: '/etc/pki/rpm-gpg', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/mysqlConfigFiles/mysql-community-source.repo', dest: '/etc/yum.repos.d', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/mysqlConfigFiles/mysql-community.repo', dest: '/etc/yum.repos.d', owner: 'root', group: 'root', mode: 644 }
+ 
+    - name: Install Mysql Community Server 5.7 Repo
+      shell: yum -y install mysql-community-server
+
+    - name: Set hostname of server
+      shell: hostnamectl set-hostname "{{ server_hostname }}"
+
+    - name: Set hostname and ipa-client-install
+      block:
+        - name: Configure Ipa hostmanager
+          shell: ipa-client-install  --principal hostmanager --password "{{ ipa_host_pwd }}" --mkhomedir --hostname="{{ server_hostname }}" --domain    ipa.unicommerce.infra  --server ipa.unicommerce.infra  --unattended
+
+        - name: Add host to uni_db host-group on ipa
+          shell: echo "{{ ipa_host_pwd }}" | kinit hostmanager | ipa hostgroup-add-member uni_db --hosts="{{ server_hostname }}"
+
+        - name: Entery for smtp in mailrc
+          shell: sed -i '/Sccsid/i set smtp=smtp://icinga2.unicommerce.infra' /etc/mail.rc
+          # when: launch_region == 'Singapore'
+      when: setup_type != 'Standalone' 
+    
+    - name: Synchronise mysql directory
+      synchronize:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        rsync_opts: 
+          - "--chown=mysql:mysql"
+      with_items:
+        - { src: '/etc/ansible/uniware/tasks/config/terraform/configFiles/mysqlConfigFiles/mysql', dest: '/var/lib' }
+
+    - name: Create delta directory
+      file:
+        path: /var/lib/mysql/delta 
+        state: directory
+        owner: root
+        group: root
+        mode: 0777
+
+
+
+    - name: Copy required config files and scripts
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      with_items:
+        - { src: '{{ workspace }}/configFiles/bashrc', dest: '/etc', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/syslog', dest: '/etc/logrotate.d', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/crontab', dest: '/etc', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/rsyslog.conf', dest: '/etc', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/chrony.conf', dest: '/etc', owner: 'root', group: 'root', mode: 755 }
+        - { src: '{{ workspace }}/configFiles/ntp.conf', dest: '/etc', owner: 'root', group: 'root', mode: 755 }
+        - { src: '{{ workspace }}/configFiles/mysqlConfigFiles/mysql_slowLog', dest: '/etc/logrotate.d', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/mysqlConfigFiles/slowlogmysql.sh', dest: '/etc/logrotate.d', owner: 'root', group: 'root', mode: 755 }
+        - { src: '{{ workspace }}/configFiles/mysqlConfigFiles/mysql-auto-tune', dest: '/usr/bin', owner: 'root', group: 'root', mode: 755 }
+        - { src: '{{ workspace }}/configFiles/mysqlConfigFiles/my.cnf', dest: '/etc', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/mysqlConfigFiles/db-write-event.service', dest: '/usr/lib/systemd/system', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/mysqlConfigFiles/db-write-event', dest: '/usr/src', owner: 'root', group: 'root', mode: 755 }
+        - { src: '{{ workspace }}/configFiles/mysqlConfigFiles/mysqld.service', dest: '/usr/lib/systemd/system', owner: 'root', group: 'root', mode: 644 }
+        - { src: '{{ workspace }}/configFiles/mysqlConfigFiles/create_final_delta.sql', dest: '/var/lib/mysql/delta', owner: 'root', group: 'root', mode: 777 }
+
+    - name: Reload Systemctl
+      shell: systemctl daemon-reload
+
+    - name: Start and enable services
+      service:
+        name: "{{ item.name }}"
+        state:  "{{ item.state }}"
+        enabled: "{{ item.enabled }}"
+      with_items:
+        - { name: 'mysqld', state: 'started', enabled: 'yes' }
+
+    - name: Change Root user password
+      shell:
+        cmd: "sh -x {{ workspace }}/remote_exec_files/ChangeRootPwd.sh {{ workspace }} {{ inventory_hostname }} {{ private_key }}"
+      delegate_to: 127.0.0.1
+
+
+    - name: Set Icinga Installation File
+      set_fact:
+        icinga_client_file: "{{ 'icinga_client_install.sh' if launch_region == 'Singapore' else 'icinga_india_client_install.sh' }}"
+      delegate_to: 127.0.0.1
+
+    - name: Output Icinga Installation File Name
+      debug: 
+        msg: "{{ icinga_client_file }}"
+
+    - name: Icinga Installation
+      script:
+        cmd: "{{ item.cmd }}"
+        chdir: "{{ item.chdir }}"
+      with_items:
+        - { cmd: '{{ workspace }}/remote_exec_files/{{ icinga_client_file }}', chdir: '/tmp' }
+
+#    - name: Icinga Config update for cluster members
+#       shell: sh -x {{ workspace }}/remote_exec_files/icingaConfUpdate.sh "{{ tenant_shortname }}" "{{ inventory_hostname }}" "{{ setup_type }}" "{{ replica_hostname }}" "{{ private_key }}" "{{ launch_region }}" >> /tmp/{{ tenant_shortname }}_icinga_conf_update.log 2>&1
+#      delegate_to: 127.0.0.1
+#      when: setup_type != 'Standalone'
+
+    - name: Install mysql-perl and aws-cli
+      shell: "{{ item.cmd }}"
+      with_items:
+        - { cmd: 'yum -y install "perl(DBD::mysql)"' }
+        - { cmd: 'yum -y install "perl-Digest-MD5"' }
+        - { cmd: 'sh -x /root/aws/install --update' }
+
+    - name: Enable db-write service and create mysql-command.log file
+      file:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: root
+        group: root
+        state: "{{ item.state }}"
+      with_items:
+        - { src: '', dest: '/var/log/mysql-command.log', state: 'touch' }
+        - { src: '/usr/lib/systemd/system/db-write-event.service', dest: '/etc/systemd/system/multi-user.target.wants/db-write-event.service', state: 'link' }
+
+    - name: Start and enable services
+      service:
+        name: "{{ item.name }}"
+        state:  "{{ item.state }}"
+        enabled: "{{ item.enabled }}"
+      with_items:
+        - { name: 'ntpd', state: 'stopped', enabled: 'no' }
+        - { name: 'chronyd', state: 'restarted', enabled: 'yes' }
+        - { name: 'mysqld', state: 'stopped', enabled: 'yes' }
+        - { name: 'db-write-event', state: 'started', enabled: 'yes' }
+        - { name: 'rsyslog', state: 'restarted', enabled: 'yes' }
+        - { name: 'mysqld', state: 'started', enabled: 'yes' }
+
+
+    - name: Tenant DB Update [Uniware DB Creation, Mongo Config Update, Replication Setup, DataSource Configuration Update]
+      shell:
+        cmd: "{{ item.cmd }}" 
+      with_items:
+        - { cmd: 'sh -x {{ workspace }}/remote_exec_files/tenantDBUpdate.sh "{{ tenant_shortname }}" "{{ email_id }}" "{{ tenant_specific_mongo_host }}" "{{ setup_type }}" "{{ replica_hostname }}" "{{ zookeeper_hostname }}" "{{ tenant_code }}" "{{ workspace }}" "{{ private_key }}" > /tmp/{{ tenant_shortname }}_db_setup.log 2>&1' }
+      delegate_to: 127.0.0.1
+        
+    - name: Write Success Status
+      shell: echo "Success!" > /tmp/{{ tenant_shortname }}_db_setup_status.txt
+      delegate_to: 127.0.0.1
+        
+    
+    
+    

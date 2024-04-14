@@ -1,0 +1,14 @@
+/var/lib/mysql/slow-slow.log {
+	create 775 mysql mysql
+	daily
+	copytruncate
+	rotate 4 
+	dateext
+	missingok
+	notifempty
+	compress
+	sharedscripts
+	 lastaction
+	 sh -x /etc/logrotate.d/slowlogmysql.sh
+endscript
+}

@@ -1,0 +1,12 @@
+[Unit]
+Description=DB changed
+After=mysqld.service
+
+[Service]
+Type=fork
+ExecStart=/usr/src/db-write-event
+TimeoutStartSec=30m
+
+RestartSec=5
+Restart=always
+StartLimitBurst=3

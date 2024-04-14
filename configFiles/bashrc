@@ -1,0 +1,128 @@
+# /etc/bashrc
+
+# System wide functions and aliases
+# Environment stuff goes in /etc/profile
+
+# It's NOT a good idea to change this file unless you know what you
+# are doing. It's much better to create a custom.sh shell script in
+# /etc/profile.d/ to make custom changes to your environment, as this
+# will prevent the need for merging in future updates.
+
+# are we an interactive shell?
+if [ "$PS1" ]; then
+  if [ -z "$PROMPT_COMMAND" ]; then
+    case $TERM in
+    xterm*|vte*)
+      if [ -e /etc/sysconfig/bash-prompt-xterm ]; then
+          PROMPT_COMMAND=/etc/sysconfig/bash-prompt-xterm
+      elif [ "${VTE_VERSION:-0}" -ge 3405 ]; then
+          PROMPT_COMMAND="__vte_prompt_command"
+      else
+          PROMPT_COMMAND='printf "\033]0;%s@%s:%s\007" "${USER}" "${HOSTNAME%%.*}" "${PWD/#$HOME/~}"'
+      fi
+      ;;
+    screen*)
+      if [ -e /etc/sysconfig/bash-prompt-screen ]; then
+          PROMPT_COMMAND=/etc/sysconfig/bash-prompt-screen
+      else
+          PROMPT_COMMAND='printf "\033k%s@%s:%s\033\\" "${USER}" "${HOSTNAME%%.*}" "${PWD/#$HOME/~}"'
+      fi
+      ;;
+    *)
+      [ -e /etc/sysconfig/bash-prompt-default ] && PROMPT_COMMAND=/etc/sysconfig/bash-prompt-default
+      ;;
+    esac
+  fi
+  # Turn on parallel history
+  shopt -s histappend
+  history -a
+  # Turn on checkwinsize
+  shopt -s checkwinsize
+  [ "$PS1" = "\\s-\\v\\\$ " ] && PS1="[\u@\h \W]\\$ "
+  # You might want to have e.g. tty in prompt (e.g. more virtual machines)
+  # and console windows
+  # If you want to do so, just add e.g.
+  # if [ "$PS1" ]; then
+  #   PS1="[\u@\h:\l \W]\\$ "
+  # fi
+  # to your custom modification shell script in /etc/profile.d/ directory
+fi
+
+if ! shopt -q login_shell ; then # We're not a login shell
+    # Need to redefine pathmunge, it get's undefined at the end of /etc/profile
+    pathmunge () {
+        case ":${PATH}:" in
+            *:"$1":*)
+                ;;
+            *)
+                if [ "$2" = "after" ] ; then
+                    PATH=$PATH:$1
+                else
+                    PATH=$1:$PATH
+                fi
+        esac
+    }
+
+    # By default, we want umask to get set. This sets it for non-login shell.
+    # Current threshold for system reserved uid/gids is 200
+    # You could check uidgid reservation validity in
+    # /usr/share/doc/setup-*/uidgid file
+    if [ $UID -gt 199 ] && [ "`/usr/bin/id -gn`" = "`/usr/bin/id -un`" ]; then
+       umask 002
+    else
+       umask 022
+    fi
+
+    SHELL=/bin/bash
+    # Only display echos from profile.d scripts if we are no login shell
+    # and interactive - otherwise just process them to set envvars
+    for i in /etc/profile.d/*.sh; do
+        if [ -r "$i" ]; then
+            if [ "$PS1" ]; then
+                . "$i"
+            else
+                . "$i" >/dev/null
+            fi
+        fi
+    done
+
+    unset i
+    unset -f pathmunge
+fi
+alias ll='ls -ltrh --color=auto'
+alias id='ps -ef | grep tomcat'
+alias S='sudo su -'
+alias serverlog='sudo tail -1000f /usr/local/apache-tomcat/logs/server.log'
+alias catlog='sudo tail -1000f /usr/local/apache-tomcat/logs/catalina.out'
+alias vi='vim'
+alias log='cd  /usr/local/apache-tomcat/logs/'
+alias java_opts="grep '^JAVA_OPTS' /usr/local/apache-tomcat/bin/catalina.sh | sed 's|[[:blank:]]-|\n-|g'"
+HISTTIMEFORMAT="%d/%m/%y %T "
+#export PROMPT_COMMAND='RETRN_VAL=$?;logger -p local3.debug "$(whoami)   [$$]: $(history 1 | sed "s/^[ ]*[0-9]\+[ ]*//" ) [$RETRN_VAL]"'
+
+logger -p local3.debug -t "$LOGNAME $$" User $LOGNAME
+function history_to_syslog
+{         
+declare cmd
+declare p_dir
+declare LOG_NAME
+cmd=$(history 1)
+cmd=$(echo $cmd |awk '{print substr($0,length($1)+2)}')
+p_dir=$(pwd) 
+LOG_NAME=$(echo $LOGNAME)
+if [ "$cmd" != "$old_command" ]; then
+logger -p local3.debug  USER = $LOG_NAME,  PWD = $p_dir, CMD = "${cmd}"
+fi  
+old_command=$cmd
+}
+trap history_to_syslog DEBUG || EXIT
+
+
+export HISTSIZE=200000
+HOST_NAME=`hostname |cut -f1,2 -d'.'`
+export PS1="\[\e[00;32m\]\u@\[\e[0m\]\[\e[01;31m\]$HOST_NAME\[\e[0m\]\[\e[00;31m\] \[\e[0m\]\[\e[00;32m\][\w]\[\e[0m\]\[\e[00;37m\] \[\e[0m\]\[\e[00;32m\]\\$\[\e[0m\]\[\e[00;37m\] \[\e[0m\]"
+# vim:ts=4:sw=4
+#export PROMPT_COMMAND='RETRN_VAL=$?;logger -p local6.debug "$(whoami) [$$]: $(history 1 | sed "s/^[ ]*[0-9]\+[ ]*//" ) [$RETRN_VAL]"'
+
+#Enable aws autocompletion
+complete -C '/usr/local/bin/aws_completer' aws

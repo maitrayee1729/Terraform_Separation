@@ -1,0 +1,12 @@
+logMaskingEnabled: false
+packages:
+    - "com.unifier.scraper.sl"
+maskingPatterns:
+    - regexString: "([a-zA-Z0-9_=]{4,})\\.([a-zA-Z0-9_=]{4,})\\.([a-zA-Z0-9_\\-\\+\\/=]{4,})"
+    - regexString: "[\\d|a-f]{8}-([\\d|a-f]{4}-){3}[\\d|a-f]{12}"
+    - regexString: "(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}"
+    - regexString: "(<[^\\/\\s]*:Password[^>]*>)([^<]*)(<\\/[^\\/\\s]*:Password>)"
+      replacementString: "$1********$3"
+    - regexString: "(?i)((\\b|[ ._-])((api)?pass(word)?|(auth|access)?token|(api|auth|secret)?key|secret|authori(s|z)ation)('|\")?[ ]*(=|:|-)[ ]*('|\")?)([^'\"\\& ]+)"
+      replacementString: "$1********"
+

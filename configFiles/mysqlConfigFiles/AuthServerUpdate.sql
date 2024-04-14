@@ -1,0 +1,1 @@
+insert ignore into  user (id, email,normalized_email,mobile,unverified_mobile,email_verified,salt,password,enabled,name,blocked,last_login_time, last_accessed_from,reset_password,created,updated) values (NULL,"EMAIL","EMAIL",NULL,NULL,"EMAIL","EMAIL",md5('info@321{EMAIL}'),1,"SERVERNAME",0,NULL,NULL,0,now(),now());

@@ -1,0 +1,6 @@
+#!/bin/bash 
+hostname=`hostname -f`
+tail -n0 -F /var/log/mysql-command.log | egrep -w -i --line-buffer 'ALTER|UPDATE|DELETE|DROP|TRUNCATE|RENAME' | while read line
+do
+    echo "$line" | mail -r "devops@unicommerce.com (Devops Notification)" -s "DB Write Event - '$hostname'" devops@unicommerce.com bhupi@unicommerce.com
+done

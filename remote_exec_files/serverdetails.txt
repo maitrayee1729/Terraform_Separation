@@ -1,0 +1,9 @@
+Details for ECloud6:
+		App Hostname: app1.ecloud6-in.unicommerce.infra
+		DB Hostname: db.ecloud6-in.unicommerce.infra
+		Replicated To: db-slave.ecloud6-in.unicommerce.infra
+		Tenant Specific Mongo: mongo1.ecloud1-in.unicommerce.infra:27017,mongo2.ecloud1-in.unicommerce.infra:27017
+		Zookeeper Hosts: zookeeper.ecloud6-in.unicommerce.infra:2181
+		Common Mongo Hosts: common1.mongo.unicommerce.infra:27017,common2.mongo.unicommerce.infra:27017
+		TAGS: UniwareApp,Enterprise
+		DB name: uniware

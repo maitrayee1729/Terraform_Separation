@@ -1,0 +1,9 @@
+#!/bin/bash
+total_mem=`free -m | head -2 | awk '{ print $2 }' | tail -1`
+cpu_core=`/bin/nproc`
+
+innodb_buffer=`echo $(( total_mem*20/100 ))`
+innodb_thread_concurrency=`echo  $(( cpu_core * 2 ))`
+
+sed -i 's/^innodb_buffer_pool_size.*/innodb_buffer_pool_size         = '$innodb_buffer'M   #global buffer/g' /etc/my.cnf
+sed -i 's/^innodb_thread_concurrency.*/innodb_thread_concurrency       = '$innodb_thread_concurrency'  #recommend 2x core quantity/g' /etc/my.cnf

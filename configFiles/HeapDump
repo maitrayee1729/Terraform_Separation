@@ -1,0 +1,10 @@
+#!/bin/bash
+
+name=`cat /usr/local/apache-tomcat/docker/active_containers | awk '{print $1}'`
+server_name=`cat /usr/local/apache-tomcat/bin/catalina.sh | tr " " "\n" | grep DserverName | head -1 | awk  -F "=" '{print $2}'`
+sudo docker exec uniware_$name bash -c "/usr/local/java/jdk1.8.0_161/bin/jmap -dump:file=/heapdump/heapdump_${server_name}_$(date +%Y_%m_%d).hprof,format=b 1"
+
+if [ "${USER}" == "uniware" ]; then
+	echo " $server_name OutOfMemory Alert" | mail -s 'Java App - OutOfMemory!' devops@unicommerce.com,backend@unicommerce.com
+fi
+

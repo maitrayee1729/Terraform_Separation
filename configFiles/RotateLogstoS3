@@ -1,0 +1,61 @@
+#!/bin/bash +x
+#
+export IFS=","
+Host=`hostname -f | cut -d"." -f1,2`
+Logs_Path="/usr/local/apache-tomcat/logs"
+aws_bin="/usr/local/bin/aws"
+Hostname=`hostname -f | awk -F '.' '{print $1}'`
+rm /tmp/s3logsstatus
+touch /tmp/s3logsstatus
+sudo chmod 777  /tmp/s3logsstatus
+function_upload () {
+if [ $Hostname == "app1" ]
+then
+$aws_bin s3 cp $Logs_Path s3://unicom-app-logs-in --recursive --exclude "*" --include "*.log.gz" --exclude "RotatedAppLogs/*.log.gz" --exclude "ServerLog/*"
+if [ $? != "0" ]
+then
+echo "Logs not moved" > /tmp/s3logsstatus
+exit
+fi
+elif [ $Hostname == "app3" ]
+then
+$aws_bin s3 cp $Logs_Path s3://unicom-app-logs-in/App3Logs/ --recursive --exclude "*" --include "*.log.gz" --exclude "RotatedAppLogs/*.log.gz" --exclude "ServerLog/*"
+if [ $? != "0" ]
+then
+echo "Logs not moved" > /tmp/s3logsstatus
+exit
+fi
+else
+$aws_bin s3 cp $Logs_Path s3://unicom-app-logs-in/taskLogs --recursive --exclude "*" --include "*.log.gz" --exclude "RotatedAppLogs/*.log.gz" --exclude "ServerLog/*"
+if [ $? != "0" ]
+then
+echo "Logs not moved" > /tmp/s3logsstatus
+exit
+fi
+fi
+}
+if [ ! -f "$aws_bin" ]
+then
+echo "not available" > /tmp/aws
+exit 1
+else
+echo "available" > /tmp/aws
+function_upload
+### move logs to a specific folder
+mv $Logs_Path/*.log.gz $Logs_Path/RotatedAppLogs
+mv $Logs_Path/*.log.*.gz $Logs_Path/RotatedAppLogs
+### Remove logs on server before 7 days
+find /usr/local/apache-tomcat/logs/ -type  f -name "*" ! -name "*access_log*" ! -name "*third-party*" -mtime +7 -delete
+cd /usr/local/apache-tomcat/logs
+for file in third-party-api-metrics.*;
+do mv $file $Host.$file;
+done
+cd /usr/local/apache-tomcat/logs
+mv $Host.third-party-api-metrics.log third-party-api-metrics.log
+$aws_bin s3 cp /usr/local/apache-tomcat/logs s3://thirdpartylogs-in --recursive --exclude "*" --include "$Host.third-party*"
+cd /usr/local/apache-tomcat/logs
+for file1 in access_log.*.gz;
+do mv $file1 $Host.$file1;
+done
+$aws_bin s3 cp /usr/local/apache-tomcat/logs s3://accesslogs-in --recursive --exclude "*" --include "$Host.access_log.*.gz"
+fi

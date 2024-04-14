@@ -1,0 +1,12 @@
+insert ignore into environment_property select null, 'save.user.at.uniauth.enabled','true';
+insert ignore into environment_property select null, 'keycloak.jwks.url','https://sso.unicommerce.com/auth/realms/uniware_web/protocol/openid-connect/certs';
+insert ignore into environment_property select null, 'keycloak.admin.auth.url','https://sso.unicommerce.com/auth/realms/master/protocol/openid-connect/token';
+insert ignore into environment_property select null, 'keycloak.admin.client_id','admin-cli';
+insert ignore into environment_property select null, 'keycloak.admin.client_secret','OHVaZyLhfVWN2kCqkQYkYcZTatSiMQcu';
+insert ignore into environment_property select null, 'keycloak.admin.rest.users.api','https://sso.unicommerce.com/auth/admin/realms/uniware_web/users';
+insert ignore into environment_property select null, 'keycloak.client.auth.url', 'https://sso.unicommerce.com/auth/realms/Uniware_web/protocol/openid-connect/token';
+insert ignore into environment_property select null, 'keycloak.admin.auth.url','https://sso.unicommerce.com/auth/realms/master/protocol/openid-connect/token';
+insert ignore into environment_property select null, 'keycloak.admin.rest.api','https://sso.unicommerce.com/auth/admin/realms/uniware_web';
+insert ignore into environment_property select null, 'keycloak.admin.client_id','admin-cli';
+insert ignore into environment_property select null, 'keycloak.admin.client_secret','fe131458-aa7f-43f1-8398-f61c027567e6';
+insert ignore into environment_property select null, 'keycloak.enabled','true';

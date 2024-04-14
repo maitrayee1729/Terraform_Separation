@@ -1,0 +1,63 @@
+#!/bin/bash +x
+#
+# uniware_release - image tag
+# uniware_docker_$tag - running container name
+
+latest_tag=$1
+
+# Check if latest version already present
+check_var=`docker images | grep $latest_tag | wc -l`
+if [ "$check_var" == 1 ]; then
+	echo --- Uniware Version $latest_tag Image Already Exists [Remove Image to proceed] ---
+	echo --- Aborting Deployment ---
+	exit
+fi
+
+num=`docker ps | grep uniware_ | wc -l`
+connector_port=90
+container_id=0
+
+if [ "$num" != 0  ]; then
+
+        # One container running already - store tag number and id
+        tag=`cat active_containers | awk 'NR==1{print $1}'`
+        container_id=`cat active_containers | awk 'NR==1{print $2}'`
+
+        #Find the running port
+        ip=`docker port uniware_$tag | head -n 1`
+        active_port=`echo $ip | grep -o -E '[^:]+$'`
+
+        # Start new container on available port
+        if [ "$active_port" -eq 8080 ]; then
+                active_port=8081
+        else
+                active_port=8080
+        fi
+
+else
+        active_port=8080
+fi        
+
+# Pull the required image 
+docker pull unidevops/uniware:$latest_tag	
+
+# Create a new container
+docker create --name uniware_$latest_tag -v /usr/local/apache-tomcat/bin:/usr/local/tomcat/bin -v /usr/local/apache-tomcat/logs:/usr/local/tomcat/logs -v /files:/usr/local/apache-tomcat/webapps/ROOT/static/files -v /usr/local/apache-tomcat/uniwareConfig:/usr/local/tomcat/conf/uniwareConfig -p $active_port:$connector_port unidevops/uniware:$latest_tag
+
+# Start uniware container
+uniware start
+       
+# Wait for tomcat to start
+while [ "`curl --head --silent --show-error --connect-timeout 2 http://localhost:$active_port/open/health | head -n1 | awk '{ print $2 }'`" != 200 ];
+do
+	echo --- Tomcat still starting -- Sleeping for 10 seconds
+	sleep 10
+done
+echo --- Container Started ---
+
+# Stop the old container
+docker stop $container_id
+sleep 5
+
+echo --- Deployment Successful ---
+

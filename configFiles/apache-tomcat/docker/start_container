@@ -1,0 +1,10 @@
+#!/bin/bash +x
+
+# Find container with latest image
+container_name=`docker ps -a --format="{{.Names}}" | sort -rk 1 | awk 'NR==1'`
+container_id=`docker ps --filter name=^/$container_name$ | awk 'NR==2{print $1}'`
+
+echo "Starting Container -- $container_name"
+docker start $container_name && echo "`echo $container_name | grep -o -E '[0-9]*[.]*[0-9]*'` $container_id" > /usr/local/apache-tomcat/docker/active_containers
+docker inspect -f '{{.State.Pid}}' $container_name > /var/run/uniware.pid
+

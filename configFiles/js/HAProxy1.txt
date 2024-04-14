@@ -1,0 +1,10 @@
+mkdir /etc/unicommerce/TENANT.lst
+
+acl host-TENANT hdr_dom(host) -f /etc/unicommerce/TENANT.lst
+
+use_backend www-TENANT if host_TENANT
+
+backend www-TENANT
+        server apache app1.TENANT_LOWER-in.unicommerce.infra:8080  check port 8080
+
+
