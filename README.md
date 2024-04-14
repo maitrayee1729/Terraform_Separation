@@ -5,7 +5,7 @@ The "Separate Tenant" project aims to provide a multi-tenant environment where e
 
 ## Configuration Options
 
-This project offers several configuration options:
+
 
 - **Single**: All tenants are hosted on a single server.
 - **Dedicated_Setup**: Each tenant's database is hosted on a separate server.
